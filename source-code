@@ -1,0 +1,208 @@
+---
+title: "Gaussian Mixture Model"
+output: pdf_document
+date: "2023-10-19"
+---
+
+install.packages("path/to/pkgName_version.tar.gz", repos=Null)
+
+#structure
+#pkgName/R/code,R
+#Documentation File or Man Pages
+#pkgName/man/doc.Rd
+#writing
+
+Type: Package
+Package: gmmcs599
+Author: Trevor Silverstein
+
+Description: This is an R package that fits a Gaussian Mixture Model to a set of data.
+Title: gmmcs599
+Maintainter: Trevor Silverstein
+Authors@R: Trevor Silverstein
+Imports: data.table
+
+```{r}
+library(data.table)
+```
+
+```{r}
+#GMM
+#' Initialization_function
+#' @param data
+#' @param K
+#' @return Returns a list of initialized cluster parameters.
+
+initialize_gmm <- function(data, K){
+ 
+   # Initialize with K-Means 
+  n.clusters <- K
+  
+  
+  kmeans.result <- kmeans(data, n.clusters)
+  data.dt <- data.table::data.table(data, cluster=factor(kmeans.result[["cluster"]]))
+  prob.mat <- matrix(
+    0, nrow(data), n.clusters,
+    dimnames=list(data=1:nrow(data), cluster=NULL))
+  
+  prob.mat[cbind(1:nrow(data), kmeans.result$cluster)] <- 1
+  
+  cluster.param.list <- list()
+  
+  for(cluster in 1:n.clusters){
+    prob.vec <- prob.mat[,cluster]
+    params <- list(
+    prior.weight=mean(prob.vec),
+    mean.vec=colSums(prob.vec * data)/sum(prob.vec))
+    diff.mat <- t(data) - params$mean.vec
+    params$cov.mat <- diff.mat %*% (prob.vec * t(diff.mat))/sum(prob.vec)
+    
+    cluster.param.list[[cluster]] <- params
+  }
+  
+  return(cluster.param.list)
+  
+}
+```
+
+
+```{r}
+#e_step updats prob.mat
+
+#' Expectation-Step
+#'
+#' @param data
+#' @param model
+#'
+#' @return Function returns a probability matrix for cluster assignments.
+#' @export
+#'
+#' @examples
+
+
+e_step <- function(data, model){
+  
+  n.clusters <- length(model)
+  
+  #update cluster probabilities 
+  
+    numerator.mat = matrix(NA, nrow(data), n.clusters)
+    for(cluster in 1:n.clusters){
+      numerator.mat[,cluster] = with(
+        model[[cluster]],
+        prior.weight*mvtnorm::dmvnorm(
+          data, mean.vec, cov.mat))
+    }
+    prob.mat <- numerator.mat/rowSums(numerator.mat)
+    return(prob.mat)
+}
+```
+
+
+```{r}
+#m_step updates parameters, is cluster.param.list initialized twice in the code?? and these.params
+
+m_step <- function(data, probabilities){
+  
+  n.clusters <- ncol(probabilities)
+  cluster.param.list <- list()
+  
+  for(cluster in 1:n.clusters){
+    prob.vec <- probabilities[,cluster]
+    params <- list(
+      prior.weight=mean(prob.vec),
+      mean.vec=colSums(prob.vec * data)/sum(prob.vec))
+      diff.mat <- t(data) - params$mean.vec
+      params$cov.mat <- diff.mat %*% (prob.vec * t(diff.mat))/sum(prob.vec)
+      
+  
+    cluster.param.list[[cluster]] <- params
+  }
+  return(cluster.param.list)
+}
+```
+
+
+```{r}
+#' GMM
+#'
+#' @param data
+#' @param K
+#' @param max_iterations
+#' @param tol for numerical issues
+#'
+#' @return Function returns a $classification matrix for cluster assignments, as well as cluster            specific parameters $prior.weight, $mean.vec, and $cov.mat.
+#' @export
+#'
+#' @examples 
+#' 
+GMM <- function(data, K, max_iter = 1000, tol = 1e-6) {
+ 
+  n.clusters <- K
+  
+  # Initialize GMM parameters
+  
+  model <- initialize_gmm(data, K)
+
+  
+  for (iter in 1:max_iter) {
+    
+    # Perform E-step
+    probabilities <- e_step(data, model)
+    
+    
+    # Store the current model for convergence check
+    old_model <- model
+    
+    # Perform M-step
+    model <- m_step(data, probabilities)
+    
+    # Check for convergence
+    
+    meanss.new <- c()
+    meanss.old <- c()
+    for(i in 1:K){
+      
+      meanss.new <- rbind(meanss.new,model[[i]]$mean.vec)
+      meanss.old <- rbind(meanss.old,old_model[[i]]$mean.vec)
+    }
+
+    
+     
+    if(sum((meanss.new - meanss.old)^2, na.rm = T) < tol) {
+      break
+    }
+  }
+  
+  # Compute the log likelihood
+
+  
+  ll.mat = matrix(NA, nrow(data), n.clusters)
+  
+  for(cluster in 1:n.clusters){
+    ll.mat[,cluster] = with(
+      model[[cluster]],
+      prior.weight*mvtnorm::dmvnorm(
+        data, mean.vec, cov.mat))
+  }
+  
+  loglik <- data.table(log.lik=sum(log(rowSums(ll.mat)),na.rm = T))
+  
+  
+  
+  # Assign data points to clusters
+  
+  cluster_assignments <- apply(probabilities, 1, which.max)
+  
+  # Create a result list similar to mclust::Mclust
+  
+  result <- list(
+    modelName = "DIAG",
+    loglik = loglik,
+    classification = cluster_assignments,
+    parameters = model
+  )
+  
+  return(result)
+}
+```
