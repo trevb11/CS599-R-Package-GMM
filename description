@@ -1,0 +1,11 @@
+Package: gmmcs599
+Title: This Package Runs a Gaussian Mixture Model
+
+Authors@R: Trevor Silverstein, jbs438@nau.edu, 
+Description: This package runs an GMM EM clustering algorithm using a model type "DIAGNOL" to fit clusters to data similar to the mclust::Mclust package.
+              The package gmmcs599 contains the main Gaussian Mixture Model function GMM(), and two subroutine functions, e_step(), and m_step(), which
+              update the probabilty of having a data point assigned to a cluster, and update the cluster paramters,
+              respectively. The package also reutnrs the negative log liklihood and a classification matrix showing cluster assignments.
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
